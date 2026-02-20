@@ -9,243 +9,13 @@ from astrbot.api.all import (
     MessageEventResult, llm_tool
 )
 from astrbot.api.event import filter
+from astrbot.api.message_components import Image, Plain
 
 # ==============================
-# HTML 模板（用于图片渲染）
+# HTML 模板（与之前相同，此处略）
 # ==============================
-
-TAXON_TEMPLATE = """
-<html>
-<head>
-  <meta charset="UTF-8"/>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 1280px;
-      height: 720px;
-      background-color: #f5f5f5;
-    }
-    .container {
-      width: 100%;
-      height: 100%;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      background-color: #fff;
-      color: #333;
-      font-family: 'Segoe UI', sans-serif;
-      border: 1px solid #ddd;
-      border-radius: 12px;
-      box-sizing: border-box;
-    }
-    h2 {
-      margin: 0 0 16px 0;
-      color: #2c3e50;
-      text-align: center;
-      font-size: 40px;
-      border-bottom: 2px solid #74ac00;
-      padding-bottom: 10px;
-    }
-    .taxon-img {
-      text-align: center;
-      margin: 10px 0;
-    }
-    .taxon-img img {
-      max-width: 300px;
-      max-height: 200px;
-      border-radius: 8px;
-      border: 1px solid #ddd;
-    }
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-      font-size: 24px;
-    }
-    .info-item {
-      padding: 8px;
-      background: #f9f9f9;
-      border-radius: 8px;
-    }
-    .label {
-      font-weight: bold;
-      color: #2c3e50;
-    }
-    .value {
-      color: #74ac00;
-      margin-left: 8px;
-    }
-    .common-name {
-      background: #e8f5e9;
-      padding: 12px;
-      border-radius: 8px;
-      margin-top: 16px;
-      text-align: center;
-      font-size: 28px;
-      border: 1px dashed #74ac00;
-    }
-    .source-info {
-      margin-top: auto;
-      border-top: 1px solid #ddd;
-      padding-top: 12px;
-      font-size: 18px;
-      color: #7f8c8d;
-      text-align: right;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h2>🌿 iNaturalist 分类单元信息</h2>
-    {% if default_photo_url %}
-    <div class="taxon-img"><img src="{{ default_photo_url }}" alt="代表照片"/></div>
-    {% endif %}
-    <div class="info-grid">
-      <div class="info-item"><span class="label">学名:</span> <span class="value">{{ name }}</span></div>
-      <div class="info-item"><span class="label">常用名:</span> <span class="value">{{ preferred_common_name or '无' }}</span></div>
-      <div class="info-item"><span class="label">分类等级:</span> <span class="value">{{ rank }}</span></div>
-      <div class="info-item"><span class="label">Iconic 分类:</span> <span class="value">{{ iconic_taxon_name or '无' }}</span></div>
-      <div class="info-item"><span class="label">父分类:</span> <span class="value">{{ parent_name or '无' }}</span></div>
-      <div class="info-item"><span class="label">观察数量:</span> <span class="value">{{ observations_count }}</span></div>
-    </div>
-    <div class="common-name">
-      <span class="label">iNaturalist ID (taxon_id):</span> <span class="value">{{ id }}</span>
-    </div>
-    <div class="source-info">
-      数据来源: iNaturalist.org 免费API
-    </div>
-  </div>
-</body>
-</html>
-"""
-
-OBSERVATIONS_TEMPLATE = """
-<html>
-<head>
-  <meta charset="UTF-8"/>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 1280px;
-      height: 720px;
-      background-color: #f5f5f5;
-    }
-    .container {
-      width: 100%;
-      height: 100%;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      background-color: #fff;
-      color: #333;
-      font-family: 'Segoe UI', sans-serif;
-      border: 1px solid #ddd;
-      border-radius: 12px;
-      box-sizing: border-box;
-    }
-    h2 {
-      margin: 0 0 8px 0;
-      color: #2c3e50;
-      text-align: center;
-      font-size: 40px;
-      border-bottom: 2px solid #1e90ff;
-      padding-bottom: 10px;
-    }
-    .search-keyword {
-      text-align: center;
-      font-size: 28px;
-      color: #1e90ff;
-      margin-bottom: 16px;
-      font-weight: bold;
-    }
-    .count-badge {
-      background: #1e90ff;
-      color: white;
-      font-size: 36px;
-      padding: 16px;
-      border-radius: 60px;
-      text-align: center;
-      margin: 16px 0;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }
-    .samples-title {
-      font-size: 24px;
-      font-weight: bold;
-      color: #2c3e50;
-      margin-top: 16px;
-      margin-bottom: 8px;
-    }
-    .sample-item {
-      background: #ecf0f1;
-      margin-bottom: 12px;
-      padding: 12px;
-      border-radius: 8px;
-      font-size: 20px;
-      border-left: 5px solid #1e90ff;
-      display: flex;
-      align-items: center;
-    }
-    .sample-thumb {
-      width: 60px;
-      height: 60px;
-      margin-right: 12px;
-      border-radius: 4px;
-      object-fit: cover;
-      background: #bdc3c7;
-    }
-    .sample-details {
-      flex: 1;
-    }
-    .sample-loc {
-      font-weight: bold;
-    }
-    .sample-link {
-      word-break: break-all;
-      font-size: 16px;
-      color: #1e90ff;
-      margin-top: 4px;
-    }
-    .source-info {
-      margin-top: auto;
-      border-top: 1px solid #ddd;
-      padding-top: 12px;
-      font-size: 18px;
-      color: #7f8c8d;
-      text-align: right;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h2>🌍 iNaturalist 观察记录</h2>
-    <div class="search-keyword">关键词: {{ keyword }}</div>
-    <div class="count-badge">总记录数: {{ totalCount }} 条</div>
-    {% if samples %}
-    <div class="samples-title">📌 样本（共 {{ samples|length }} 条）</div>
-    {% for sample in samples %}
-    <div class="sample-item">
-      {% if sample.photo_url %}
-      <img class="sample-thumb" src="{{ sample.photo_url }}" alt="照片"/>
-      {% else %}
-      <div class="sample-thumb" style="background:#bdc3c7; text-align:center; line-height:60px;">📷</div>
-      {% endif %}
-      <div class="sample-details">
-        <div><span class="sample-loc">📍 地点:</span> {{ sample.place_guess or '未知' }}</div>
-        <div><span class="sample-loc">📅 日期:</span> {{ sample.observed_on or '未知' }}</div>
-        <div><span class="sample-loc">🔗 链接:</span> <span class="sample-link">{{ sample.link }}</span></div>
-      </div>
-    </div>
-    {% endfor %}
-    {% endif %}
-    <div class="source-info">
-      数据来源: iNaturalist.org 免费API
-    </div>
-  </div>
-</body>
-</html>
-"""
+TAXON_TEMPLATE = """..."""  # 请保留原有的模板内容
+OBSERVATIONS_TEMPLATE = """..."""  # 请保留原有的模板内容
 
 @register(
     "astrbot_plugin_inaturalist_search",
@@ -255,27 +25,16 @@ OBSERVATIONS_TEMPLATE = """
     "https://github.com/CecilyGao/astrbot_plugin_inaturalist_search"
 )
 class InaturalistPlugin(Star):
-    """
-    调用 iNaturalist API 查询分类单元信息和观察记录。
-    支持命令：
-      ina taxon <关键词>               - 查询分类单元信息（可用 t 缩写）
-      ina observations [数量] <关键词>  - 搜索观察记录，显示总数和样本（可用 obs 缩写），数量可前置如：ina obs 10 啄木鸟
-      ina help                          - 显示帮助
-    也提供LLM工具调用。
-    """
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
         self.logger = logging.getLogger("InaturalistPlugin")
         self.logger.setLevel(logging.DEBUG)
         self.config = config or {}
 
-        # 认证预留
         self.inat_user = self.config.get("inat_user", "")
         self.inat_password = self.config.get("inat_password", "")
 
-        # 全局发送模式
         self.send_mode = self.config.get("send_mode", "text")
-        # 子命令专用发送模式
         self.taxon_send_mode = self.config.get("taxon_send_mode", "")
         if not self.taxon_send_mode:
             self.taxon_send_mode = self.send_mode
@@ -333,7 +92,6 @@ class InaturalistPlugin(Star):
             yield event.plain_result(f"未找到与 [{keyword}] 匹配的分类单元。")
             return
 
-        # 提取显示信息
         info = {
             "id": taxon.get("id"),
             "name": taxon.get("name", "未知"),
@@ -344,16 +102,15 @@ class InaturalistPlugin(Star):
             "observations_count": taxon.get("observations_count", 0),
             "default_photo_url": None
         }
-        # 尝试获取代表照片
         if taxon.get("default_photo"):
             photo = taxon["default_photo"]
             if photo.get("url"):
-                # 替换为 medium 尺寸
                 info["default_photo_url"] = photo["url"].replace("square", "medium")
 
         if self.taxon_send_mode == "image":
             img_url = await self.render_taxon_info(info)
-            yield event.image_result(img_url)
+            # 参考视频插件，使用 chain_result 发送图片
+            yield event.chain_result([Image.fromURL(img_url)])
         else:
             text = (
                 f"🌿 iNaturalist 分类单元信息：\n"
@@ -392,7 +149,6 @@ class InaturalistPlugin(Star):
             yield event.plain_result(f"搜索 [{keyword}] 的观察记录时出错。")
             return
 
-        # 处理样本，添加链接和照片
         samples = []
         for obs in observations:
             sample = {
@@ -402,7 +158,6 @@ class InaturalistPlugin(Star):
                 "link": f"https://www.inaturalist.org/observations/{obs.get('id')}",
                 "photo_url": None
             }
-            # 取第一张照片的 medium 尺寸
             if obs.get("photos") and len(obs["photos"]) > 0:
                 photo = obs["photos"][0]
                 if photo.get("url"):
@@ -410,23 +165,21 @@ class InaturalistPlugin(Star):
             samples.append(sample)
 
         if self.observations_send_mode == "image":
-            # 图片模式：渲染一张大图
             img_url = await self.render_observations_info(
                 keyword=keyword,
                 total_count=total_count,
                 samples=samples
             )
-            yield event.image_result(img_url)
+            # 参考视频插件，使用 chain_result 发送图片
+            yield event.chain_result([Image.fromURL(img_url)])
         else:
-            # 文本模式：先发送总览消息，再逐条发送带图片的消息
             yield event.plain_result(f"🌍 iNaturalist 观察记录搜索：\n关键词：{keyword}\n总记录数：{total_count} 条")
             for sample in samples:
                 text = f"📍 地点：{sample['place_guess'] or '未知'}\n📅 日期：{sample['observed_on'] or '未知'}\n🔗 链接：{sample['link']}"
                 if sample.get('photo_url'):
-                    # 发送带图片和文本的消息
-                    yield event.image_result(sample['photo_url'], text)
+                    chain = [Image.fromURL(sample['photo_url']), Plain(text)]
+                    yield event.chain_result(chain)
                 else:
-                    # 无照片，仅发送文本
                     yield event.plain_result(text)
 
     async def _handle_help(self, event: AstrMessageEvent):
@@ -451,11 +204,6 @@ class InaturalistPlugin(Star):
     # =============================
     @llm_tool(name="get_inaturalist_taxon")
     async def get_inaturalist_taxon_tool(self, event: AstrMessageEvent, keyword: str) -> MessageEventResult:
-        '''查询iNaturalist中的分类单元信息，当用户询问某个物种的分类信息时使用。
-
-        Args:
-            keyword (string): 物种关键词，例如 "大熊猫" 或 "Ailuropoda melanoleuca"
-        '''
         taxon = await self.search_taxon(keyword)
         if not taxon:
             yield event.plain_result(f"未找到分类单元 [{keyword}] 的信息。")
@@ -476,7 +224,7 @@ class InaturalistPlugin(Star):
 
         if self.taxon_send_mode == "image":
             img_url = await self.render_taxon_info(info)
-            yield event.image_result(img_url)
+            yield event.chain_result([Image.fromURL(img_url)])
         else:
             text = (
                 f"🌿 iNaturalist 分类单元信息：\n"
@@ -493,11 +241,6 @@ class InaturalistPlugin(Star):
 
     @llm_tool(name="get_inaturalist_observations")
     async def get_inaturalist_observations_tool(self, event: AstrMessageEvent, keyword: str) -> MessageEventResult:
-        '''查询iNaturalist中与关键词匹配的观察记录，当用户询问某物种的观察记录或分布时使用。
-
-        Args:
-            keyword (string): 搜索关键词，例如 "大熊猫" 或 "啄木鸟"
-        '''
         total_count, observations = await self.search_observations(keyword, limit=self.default_limit)
         if total_count is None:
             yield event.plain_result(f"搜索 [{keyword}] 的观察记录时出错。")
@@ -520,15 +263,14 @@ class InaturalistPlugin(Star):
 
         if self.observations_send_mode == "image":
             img_url = await self.render_observations_info(keyword, total_count, samples)
-            yield event.image_result(img_url)
+            yield event.chain_result([Image.fromURL(img_url)])
         else:
-            # 先发送总览消息
             yield event.plain_result(f"🌍 iNaturalist 观察记录搜索：关键词“{keyword}”，共 {total_count} 条记录。")
-            # 再逐条发送
             for sample in samples:
                 text = f"📍 地点：{sample['place_guess'] or '未知'}\n📅 日期：{sample['observed_on'] or '未知'}\n🔗 链接：{sample['link']}"
                 if sample.get('photo_url'):
-                    yield event.image_result(sample['photo_url'], text)
+                    chain = [Image.fromURL(sample['photo_url']), Plain(text)]
+                    yield event.chain_result(chain)
                 else:
                     yield event.plain_result(text)
 
@@ -536,15 +278,12 @@ class InaturalistPlugin(Star):
     # iNaturalist API 调用核心
     # =============================
     async def search_taxon(self, keyword: str) -> Optional[Dict[str, Any]]:
-        """
-        调用 /v1/taxa 接口，搜索分类单元，返回最佳匹配的第一个结果。
-        """
         self.logger.debug(f"search_taxon: {keyword}")
         url = "https://api.inaturalist.org/v1/taxa"
         params = {
             "q": keyword,
             "per_page": 1,
-            "order_by": "observations_count",  # 按观察数排序，通常更相关
+            "order_by": "observations_count",
             "order": "desc"
         }
         try:
@@ -565,10 +304,6 @@ class InaturalistPlugin(Star):
             return None
 
     async def search_observations(self, keyword: str, limit: int = 5) -> tuple[Optional[int], List[Dict]]:
-        """
-        调用 /v1/observations 接口，搜索观察记录。
-        返回 (总记录数, 样本列表)
-        """
         self.logger.debug(f"search_observations: keyword={keyword}, limit={limit}")
         url = "https://api.inaturalist.org/v1/observations"
         params = {
@@ -594,7 +329,7 @@ class InaturalistPlugin(Star):
             return None, []
 
     # =============================
-    # 渲染图片
+    # 渲染图片（返回图片 URL）
     # =============================
     async def render_taxon_info(self, info: dict) -> str:
         self.logger.debug(f"Rendering taxon info: {info}")
