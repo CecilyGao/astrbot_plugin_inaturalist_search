@@ -53,6 +53,9 @@ ina t Ailuropoda melanoleuca
 ```
 **返回信息**：学名、常用名、分类等级、Iconic 分类、父分类、观察总数、iNaturalist ID 及详情链接。
 
+<img width="766" height="537" alt="屏幕截图 2026-02-20 202636" src="https://github.com/user-attachments/assets/6e2b859a-1b01-49db-8987-ee1fe7cc5110" />
+
+
 ### 2. 搜索观察记录
 ```
 ina observations [数量] <关键词>   （可缩写为ina obs [数量] <关键词>）
@@ -64,6 +67,8 @@ ina observations 10 啄木鸟
 ina obs 5 蜻蜓
 ```
 **返回信息**：总记录数、样本列表（含地点、观察日期、网页链接，图片模式下显示缩略图）。
+
+![9883581897608F7611F069D285049305](https://github.com/user-attachments/assets/fb669519-d9f2-40b4-a9bd-13bb3e9c2ed9)
 
 ### 3. 显示帮助
 ```
@@ -77,7 +82,13 @@ ina help
 当发送模式设为 `image` 时，插件会将数据渲染为固定尺寸（1280×720）的图片，包含关键信息和来源声明。
 
 - **分类单元图片**：展示学名、常用名、分类树、代表照片（若有）。
+
+![D5B48BB96172FFC2047242298FC90306](https://github.com/user-attachments/assets/98e8e178-76b9-4ce6-a56e-61bad0dd4ab1)
+
 - **观察记录图片**：展示关键词、总记录数、样本列表及缩略图。
+
+![4DA135B90CE083DA90980DA7349DAB78](https://github.com/user-attachments/assets/e4de2d23-7cc0-439f-9a54-86a8baee3206)
+
 
 ## 🤖 支持平台
 
