@@ -1,0 +1,6 @@
+name: astrbot_plugin_inaturalist_search              # 这是你的插件的唯一识别名（必须唯一）
+desc: 一个基于 iNaturalist API 的 AstrBot 插件，支持物种分类信息查询和观察记录搜索。  # 插件简短描述
+help: 输入ina help可获取插件帮助信息    # 插件的帮助信息
+version: v1.0.0                       # 插件版本号
+author: CecilyGao                      # 作者
+repo: https://github.com/CecilyGao/astrbot_plugin_inaturalist_search  # 插件仓库地址
