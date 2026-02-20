@@ -263,27 +263,27 @@ class InaturalistPlugin(Star):
       ina help                          - 显示帮助
     也提供LLM工具调用。
     """
-    def __init__(self, context: Context, config: dict):
+    def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
         self.logger = logging.getLogger("InaturalistPlugin")
         self.logger.setLevel(logging.DEBUG)
-        self.config = config
+        self.config = config or {}
 
         # 认证预留
-        self.inat_user = config.get("inat_user", "")
-        self.inat_password = config.get("inat_password", "")
+        self.inat_user = self.config.get("inat_user", "")
+        self.inat_password = self.config.get("inat_password", "")
 
         # 全局发送模式
-        self.send_mode = config.get("send_mode", "text")
+        self.send_mode = self.config.get("send_mode", "text")
         # 子命令专用发送模式
-        self.taxon_send_mode = config.get("taxon_send_mode", "")
+        self.taxon_send_mode = self.config.get("taxon_send_mode", "")
         if not self.taxon_send_mode:
             self.taxon_send_mode = self.send_mode
-        self.observations_send_mode = config.get("observations_send_mode", "")
+        self.observations_send_mode = self.config.get("observations_send_mode", "")
         if not self.observations_send_mode:
             self.observations_send_mode = self.send_mode
 
-        self.default_limit = config.get("default_observation_limit", 5)
+        self.default_limit = self.config.get("default_observation_limit", 5)
         try:
             self.default_limit = int(self.default_limit)
         except (ValueError, TypeError):
