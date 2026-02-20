@@ -1,0 +1,41 @@
+{
+    "inat_user": {
+        "description": "iNaturalist 用户名（预留，当前读 API 不需要）",
+        "type": "string",
+        "hint": "用于未来写操作认证",
+        "obvious_hint": true
+    },
+    "inat_password": {
+        "description": "iNaturalist 密码（预留）",
+        "type": "string",
+        "hint": "用于未来写操作认证",
+        "obvious_hint": true
+    },
+    "send_mode": {
+        "description": "全局发送模式",
+        "type": "string",
+        "options": ["text", "image"],
+        "default": "text",
+        "hint": "全局默认发送方式（文本或图片），若未单独配置 taxon/obs 模式则使用此值"
+    },
+    "taxon_send_mode": {
+        "description": "物种查询发送模式",
+        "type": "string",
+        "options": ["text", "image"],
+        "default": "",
+        "hint": "单独设置 taxon 子命令的发送方式，留空则继承全局 send_mode"
+    },
+    "observations_send_mode": {
+        "description": "观察记录查询发送模式",
+        "type": "string",
+        "options": ["text", "image"],
+        "default": "",
+        "hint": "单独设置 observations 子命令的发送方式，留空则继承全局 send_mode"
+    },
+    "default_observation_limit": {
+        "description": "观察记录搜索默认返回的样本数量",
+        "type": "int",
+        "default": 5,
+        "hint": "当用户未指定数量时，默认返回的记录条数"
+    }
+}
