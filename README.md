@@ -42,12 +42,9 @@ git clone https://github.com/CecilyGao/astrbot_plugin_inaturalist_search.git
 
 ## 🧑‍💻 命令用法
 
-主命令为 `ina`，后跟子命令。所有子命令均支持中文关键词。
-
 ### 1. 查询分类单元（物种）
 ```
-ina taxon <关键词>
-ina t <关键词>          # 缩写
+ina taxon <关键词>   （可缩写为ina t <关键词>）
 ```
 **示例**：
 ```
@@ -58,10 +55,9 @@ ina t Ailuropoda melanoleuca
 
 ### 2. 搜索观察记录
 ```
-ina observations [数量] <关键词>
-ina obs [数量] <关键词>   # 缩写
+ina observations [数量] <关键词>   （可缩写为ina obs [数量] <关键词>）
 ```
-- `[数量]` 为可选数字，指定返回的样本条数（不超过 200），默认为配置中的 `default_observation_limit`。
+- `[数量]` 为可选数字，指定返回的样本条数（不超过 15），默认为配置中的 `default_observation_limit`。
 **示例**：
 ```
 ina observations 10 啄木鸟
@@ -75,23 +71,10 @@ ina help
 ```
 列出所有命令及示例。
 
-## 🤖 LLM 函数调用工具
-
-插件为 AI 助手提供了两个函数，可在 LLM 调用时直接使用：
-
-### `get_inaturalist_taxon(keyword: str)`
-- **描述**：查询 iNaturalist 中的分类单元信息。
-- **参数**：`keyword` – 物种关键词（如“大熊猫”）。
-
-### `get_inaturalist_observations(keyword: str)`
-- **描述**：搜索 iNaturalist 中的观察记录。
-- **参数**：`keyword` – 搜索关键词（如“啄木鸟”）。
-
-调用结果会根据相应的发送模式（`taxon_send_mode` / `observations_send_mode`）返回文本或图片。
 
 ## 📷 图片渲染效果
 
-当发送模式设为 `image` 时，插件会将数据渲染为固定尺寸（1280×720）的图片，样式简洁美观，包含关键信息和来源声明。
+当发送模式设为 `image` 时，插件会将数据渲染为固定尺寸（1280×720）的图片，包含关键信息和来源声明。
 
 - **分类单元图片**：展示学名、常用名、分类树、代表照片（若有）。
 - **观察记录图片**：展示关键词、总记录数、样本列表及缩略图。
