@@ -410,6 +410,7 @@ class InaturalistPlugin(Star):
             samples.append(sample)
 
         if self.observations_send_mode == "image":
+            # 图片模式：渲染一张大图
             img_url = await self.render_observations_info(
                 keyword=keyword,
                 total_count=total_count,
@@ -417,16 +418,16 @@ class InaturalistPlugin(Star):
             )
             yield event.image_result(img_url)
         else:
-            text = f"🌍 iNaturalist 观察记录搜索：\n关键词：{keyword}\n总记录数：{total_count} 条\n"
-            if samples:
-                text += f"\n📌 最新{len(samples)}条样本：\n"
-                for i, s in enumerate(samples, 1):
-                    place = s['place_guess'] or '未知地点'
-                    date = s['observed_on'] or '未知日期'
-                    text += f"{i}. 地点：{place}，日期：{date}\n   链接：{s['link']}\n"
-            else:
-                text += "无样本记录。\n"
-            yield event.plain_result(text)
+            # 文本模式：先发送总览消息，再逐条发送带图片的消息
+            yield event.plain_result(f"🌍 iNaturalist 观察记录搜索：\n关键词：{keyword}\n总记录数：{total_count} 条")
+            for sample in samples:
+                text = f"📍 地点：{sample['place_guess'] or '未知'}\n📅 日期：{sample['observed_on'] or '未知'}\n🔗 链接：{sample['link']}"
+                if sample.get('photo_url'):
+                    # 发送带图片和文本的消息
+                    yield event.image_result(sample['photo_url'], text)
+                else:
+                    # 无照片，仅发送文本
+                    yield event.plain_result(text)
 
     async def _handle_help(self, event: AstrMessageEvent):
         help_text = (
@@ -521,16 +522,15 @@ class InaturalistPlugin(Star):
             img_url = await self.render_observations_info(keyword, total_count, samples)
             yield event.image_result(img_url)
         else:
-            text = f"🌍 iNaturalist 观察记录搜索：关键词“{keyword}”，共 {total_count} 条记录。"
-            if samples:
-                text += "\n样本：\n"
-                for s in samples:
-                    place = s['place_guess'] or '未知'
-                    date = s['observed_on'] or '未知'
-                    text += f"📍 {place} ({date}) {s['link']}\n"
-            else:
-                text += " 无样本详情。"
-            yield event.plain_result(text)
+            # 先发送总览消息
+            yield event.plain_result(f"🌍 iNaturalist 观察记录搜索：关键词“{keyword}”，共 {total_count} 条记录。")
+            # 再逐条发送
+            for sample in samples:
+                text = f"📍 地点：{sample['place_guess'] or '未知'}\n📅 日期：{sample['observed_on'] or '未知'}\n🔗 链接：{sample['link']}"
+                if sample.get('photo_url'):
+                    yield event.image_result(sample['photo_url'], text)
+                else:
+                    yield event.plain_result(text)
 
     # =============================
     # iNaturalist API 调用核心
