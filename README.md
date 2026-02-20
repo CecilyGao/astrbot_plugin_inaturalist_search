@@ -79,6 +79,10 @@ ina help
 - **分类单元图片**：展示学名、常用名、分类树、代表照片（若有）。
 - **观察记录图片**：展示关键词、总记录数、样本列表及缩略图。
 
+## 🤖 支持平台
+
+理论上支持大部分平台，不过由于我只有napcat QQ，只测试过且成功过此平台。
+
 ## 🌐 数据来源
 
 所有数据均来自 [iNaturalist.org](https://www.inaturalist.org) 的公开 API，遵循 [iNaturalist 服务条款](https://www.inaturalist.org/terms)。请合理使用，避免高频请求（建议 ≤60 次/分钟）。
