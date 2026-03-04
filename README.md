@@ -39,6 +39,8 @@ git clone https://github.com/CecilyGao/astrbot_plugin_inaturalist_search.git
 | `observations_send_mode` | string | `""` | 观察记录查询专用模式，留空则继承 `send_mode` |
 | `default_observation_limit` | int | `5` | 观察记录搜索未指定数量时，默认返回的样本条数 |
 
+iNaturalist API为公开信息，无需用户自行获取，用户名与密码也并非必填信息。
+
 ## 🧑‍💻 命令用法
 
 ### 1. 查询分类单元（物种）
