@@ -3,6 +3,7 @@ import logging
 import random
 import traceback
 import importlib
+import asyncio
 from typing import Optional, List, Dict, Any
 
 from astrbot.api.all import (
