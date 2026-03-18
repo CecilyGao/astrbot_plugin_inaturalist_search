@@ -10,7 +10,8 @@ from astrbot.api.all import (
     MessageEventResult, llm_tool
 )
 from astrbot.api.event import filter
-from astrbot.api.message_components import Image, Plain, Target
+from astrbot.api.message_components import Image, Plain
+from astrbot.api.message import Target  # 修正导入路径
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
     AiocqhttpMessageEvent,
 )
