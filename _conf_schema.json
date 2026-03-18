@@ -37,5 +37,20 @@
         "type": "int",
         "default": 5,
         "hint": "当用户未指定数量时，默认返回的记录条数"
+    },
+    "daily_species_cron": {
+        "description": "每日随机物种播报的CRON表达式，例如 '0 9 * * *' 表示每天9点。留空则不启用。",
+        "type": "string",
+        "default": "",
+        "hint": "CRON表达式，用于定时播报"
+    },
+    "daily_species_white_list": {
+        "description": "每日物种播报白名单，UMO格式列表，例如 ['default:GroupMessage:921431240']",
+        "type": "array",
+        "items": {
+            "type": "string"
+        },
+        "default": [],
+        "hint": "接收播报的目标列表"
     }
 }
