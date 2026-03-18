@@ -821,66 +821,89 @@ class InaturalistPlugin(Star):
     # =============================
     # 每日随机物种相关方法
     # =============================
+
     async def _fetch_random_species(self) -> Optional[Dict[str, Any]]:
-        """
-        从 iNaturalist 获取一个随机物种的信息
-        返回字典包含：id, name, common_name, description, photo_url, link
-        """
-        try:
+    """
+    从 iNaturalist 获取一个随机物种的信息，增加错误处理和重试
+    """
+        max_retries = 3
+        headers = {"User-Agent": "AstrBot-InaturalistPlugin/1.1.0"}  # 避免被限流
+
+        for attempt in range(max_retries):
+            try:
             # 第一步：获取总 taxa 数量
-            url = "https://api.inaturalist.org/v1/taxa"
-            params = {"per_page": 1}
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, timeout=10) as resp:
-                    if resp.status != 200:
-                        self.logger.error(f"获取总taxa数量失败: {resp.status}")
-                        return None
-                    data = await resp.json()
-                    total_results = data.get("total_results", 0)
-                    if total_results == 0:
-                        self.logger.error("总taxa结果为0")
-                        return None
+                url = "https://api.inaturalist.org/v1/taxa"
+                params = {"per_page": 1}
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, params=params, headers=headers, timeout=10) as resp:
+                        if resp.status != 200:
+                            self.logger.error(f"获取总taxa数量失败 (attempt {attempt+1}): HTTP {resp.status}")
+                            if attempt == max_retries - 1:
+                                return None
+                            await asyncio.sleep(1)
+                            continue
+                        data = await resp.json()
+                        total_results = data.get("total_results", 0)
+                        if total_results == 0:
+                            self.logger.error(f"总taxa结果为0 (attempt {attempt+1})")
+                            if attempt == max_retries - 1:
+                                return None
+                            await asyncio.sleep(1)
+                            continue
 
             # 随机选择一个页码 (per_page=1 时页数等于总结果数)
-            random_page = random.randint(1, total_results)
-            params = {"page": random_page, "per_page": 1}
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, timeout=10) as resp:
-                    if resp.status != 200:
-                        self.logger.error(f"获取随机taxa失败: {resp.status}")
-                        return None
-                    data = await resp.json()
-                    results = data.get("results", [])
-                    if not results:
-                        self.logger.error("随机taxa结果为空")
-                        return None
-                    taxon = results[0]
+                random_page = random.randint(1, total_results)
+                params = {"page": random_page, "per_page": 1}
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, params=params, headers=headers, timeout=10) as resp:
+                        if resp.status != 200:
+                            self.logger.error(f"获取随机taxa失败 (attempt {attempt+1}): HTTP {resp.status}")
+                            if attempt == max_retries - 1:
+                                return None
+                            await asyncio.sleep(1)
+                            continue
+                        data = await resp.json()
+                        results = data.get("results", [])
+                        if not results:
+                            self.logger.error(f"随机taxa结果为空 (attempt {attempt+1})")
+                            if attempt == max_retries - 1:
+                                return None
+                            await asyncio.sleep(1)
+                            continue
+                        taxon = results[0]
 
             # 提取信息
-            info = {
-                "id": taxon.get("id"),
-                "name": taxon.get("name", "未知学名"),
-                "common_name": taxon.get("preferred_common_name") or "无常用名",
-                "description": "暂无详细介绍。",
-                "photo_url": None,
-                "link": f"https://www.inaturalist.org/taxa/{taxon.get('id')}"
-            }
+                info = {
+                    "id": taxon.get("id"),
+                    "name": taxon.get("name", "未知学名"),
+                    "common_name": taxon.get("preferred_common_name") or "无常用名",
+                    "description": "暂无详细介绍。",
+                    "photo_url": None,
+                    "link": f"https://www.inaturalist.org/taxa/{taxon.get('id')}"
+                }
 
-            # 获取介绍（如果有wikipedia_summary）
-            if taxon.get("wikipedia_summary"):
-                summary = taxon["wikipedia_summary"]
-                if isinstance(summary, dict) and summary.get("description"):
-                    info["description"] = summary["description"]
+            # 获取介绍（兼容不同格式）
+                wiki_summary = taxon.get("wikipedia_summary")
+                if wiki_summary:
+                    if isinstance(wiki_summary, dict):
+                        info["description"] = wiki_summary.get("description", info["description"])
+                    elif isinstance(wiki_summary, str):
+                        info["description"] = wiki_summary  # 如果是字符串直接使用
 
             # 获取图片
-            if taxon.get("default_photo") and taxon["default_photo"].get("url"):
-                info["photo_url"] = taxon["default_photo"]["url"].replace("square", "medium")
+                if taxon.get("default_photo") and taxon["default_photo"].get("url"):
+                    info["photo_url"] = taxon["default_photo"]["url"].replace("square", "medium")
 
-            return info
+                self.logger.info(f"成功获取随机物种: {info['name']} (ID: {info['id']})")
+                return info
 
-        except Exception as e:
-            self.logger.error(f"获取随机物种失败: {e}\n{traceback.format_exc()}")
-            return None
+            except Exception as e:
+                self.logger.error(f"获取随机物种失败 (attempt {attempt+1}): {e}\n{traceback.format_exc()}")
+                if attempt == max_retries - 1:
+                    return None
+                await asyncio.sleep(1)
+
+        return None
 
     def _build_species_message(self, info: dict) -> list:
         """
