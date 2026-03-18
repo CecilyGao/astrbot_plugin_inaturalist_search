@@ -2,6 +2,7 @@ import aiohttp
 import logging
 import random
 import traceback
+import importlib
 from typing import Optional, List, Dict, Any
 
 from astrbot.api.all import (
@@ -11,16 +12,14 @@ from astrbot.api.all import (
 )
 from astrbot.api.event import filter
 from astrbot.api.message_components import Image, Plain
-from astrbot.api.message import Target  # 修正导入路径
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
     AiocqhttpMessageEvent,
 )
 from astrbot.core import logger
 
 # ==============================
-# HTML 模板（用于图片渲染）
+# HTML 模板（与之前相同）
 # ==============================
-
 TAXON_TEMPLATE = """
 <html>
 <head>
@@ -278,6 +277,26 @@ class InaturalistPlugin(Star):
         self.logger.setLevel(logging.DEBUG)
         self.config = config or {}
 
+        # 动态导入 Target（兼容不同 AstrBot 版本）
+        self.Target = None
+        possible_modules = [
+            'astrbot.api.message',
+            'astrbot.api.message_components',
+            'astrbot.api.message_target',
+            'astrbot.api.target',
+        ]
+        for mod_name in possible_modules:
+            try:
+                mod = importlib.import_module(mod_name)
+                if hasattr(mod, 'Target'):
+                    self.Target = getattr(mod, 'Target')
+                    self.logger.info(f"成功导入 Target 从 {mod_name}")
+                    break
+            except ImportError:
+                continue
+        if self.Target is None:
+            self.logger.error("无法导入 Target 类，每日播报功能将不可用（手动 gbif daily 仍可使用）")
+
         # 认证预留
         self.inat_user = self.config.get("inat_user", "")
         self.inat_password = self.config.get("inat_password", "")
@@ -302,7 +321,7 @@ class InaturalistPlugin(Star):
         self.daily_species_cron = self.config.get("daily_species_cron", "")
         self.daily_species_white_list = self.config.get("daily_species_white_list", [])
         self.daily_job = None
-        if self.daily_species_cron:
+        if self.daily_species_cron and self.Target is not None:  # 只有 Target 可用时才注册定时任务
             self._setup_daily_job()
 
         self.logger.debug(f"InaturalistPlugin initialized. "
@@ -331,12 +350,8 @@ class InaturalistPlugin(Star):
             self.logger.error(f"设置每日物种播报定时任务失败: {e}")
 
     def _parse_cron(self, cron_expr: str) -> dict:
-        """
-        将 CRON 表达式解析为 apscheduler 的 cron 参数
-        支持标准 5 位或 6 位 CRON，这里简化为按空格分割
-        """
+        """将 CRON 表达式解析为 apscheduler 参数"""
         parts = cron_expr.split()
-        # 适配常见的 5 位 (分 时 日 月 周)
         if len(parts) == 5:
             return {
                 'minute': parts[0],
@@ -346,7 +361,7 @@ class InaturalistPlugin(Star):
                 'day_of_week': parts[4]
             }
         else:
-            # 其他情况直接返回原表达式，可能报错
+            # 直接传递原表达式，可能报错
             return {'cron': cron_expr}
 
     async def terminate(self):
@@ -359,7 +374,7 @@ class InaturalistPlugin(Star):
                 self.logger.error(f"移除定时任务失败: {e}")
 
     # =============================
-    # 发送合并转发（参考 multimsg 插件）
+    # 发送合并转发（与之前相同）
     # =============================
     async def _send_forward(self, event: AstrMessageEvent, nodes: list):
         """使用 OneBot API 发送合并转发消息"""
@@ -424,7 +439,6 @@ class InaturalistPlugin(Star):
             return
 
         self.logger.info("用户手动触发随机物种介绍")
-        # 发送等待提示
         yield event.plain_result("正在获取随机物种信息，请稍候...")
 
         info = await self._fetch_random_species()
@@ -904,6 +918,10 @@ class InaturalistPlugin(Star):
             self.logger.warning("白名单为空，跳过播报")
             return
 
+        if self.Target is None:
+            self.logger.error("Target 类不可用，无法发送消息")
+            return
+
         info = await self._fetch_random_species()
         if not info:
             self.logger.error("获取随机物种信息失败，本次播报取消")
@@ -914,7 +932,6 @@ class InaturalistPlugin(Star):
         for umo in self.daily_species_white_list:
             try:
                 platform_name, msg_type, target_id = self._parse_umo(umo)
-                # 根据消息类型确定 target_type
                 if msg_type == "GroupMessage":
                     target_type = "group"
                 elif msg_type == "FriendMessage":
@@ -928,7 +945,8 @@ class InaturalistPlugin(Star):
                     self.logger.error(f"平台 {platform_name} 不存在，跳过 {umo}")
                     continue
 
-                target = Target(platform_name, target_id, target_type)
+                # 使用动态导入的 Target 类构造目标
+                target = self.Target(platform_name, target_id, target_type)
                 await platform.send_message(target, chain)
                 self.logger.info(f"已向 {umo} 发送每日物种介绍")
             except Exception as e:
