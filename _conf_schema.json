@@ -46,7 +46,7 @@
     },
     "daily_species_white_list": {
         "description": "每日物种播报白名单，UMO格式列表，例如 ['default:GroupMessage:921431240']",
-        "type": "array",
+        "type": "list",
         "items": {
             "type": "string"
         },
