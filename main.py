@@ -18,8 +18,9 @@ from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
 from astrbot.core import logger
 
 # ==============================
-# HTML 模板（与之前相同）
+# HTML 模板（用于图片渲染）
 # ==============================
+
 TAXON_TEMPLATE = """
 <html>
 <head>
@@ -266,8 +267,8 @@ class InaturalistPlugin(Star):
     支持命令：
       ina taxon <关键词>               - 查询分类单元信息（可用 t 缩写）
       ina observations [数量] <关键词>  - 搜索观察记录，显示总数和样本（可用 obs 缩写），数量可前置如：ina obs 10 啄木鸟
-      ina help                          - 显示帮助
-      gbif daily                        - 手动触发随机物种介绍播报
+      ina daily                         - 手动获取一条随机物种介绍
+      ina help                           - 显示帮助
     也提供LLM工具调用。
     每日随机物种播报：通过 CRON 表达式配置，向白名单中的群/私聊发送随机物种介绍。
     """
@@ -295,7 +296,7 @@ class InaturalistPlugin(Star):
             except ImportError:
                 continue
         if self.Target is None:
-            self.logger.error("无法导入 Target 类，每日播报功能将不可用（手动 gbif daily 仍可使用）")
+            self.logger.error("无法导入 Target 类，每日播报功能将不可用（手动 ina daily 仍可使用）")
 
         # 认证预留
         self.inat_user = self.config.get("inat_user", "")
@@ -374,7 +375,7 @@ class InaturalistPlugin(Star):
                 self.logger.error(f"移除定时任务失败: {e}")
 
     # =============================
-    # 发送合并转发（与之前相同）
+    # 发送合并转发（参考 multimsg 插件）
     # =============================
     async def _send_forward(self, event: AstrMessageEvent, nodes: list):
         """使用 OneBot API 发送合并转发消息"""
@@ -423,22 +424,18 @@ class InaturalistPlugin(Star):
         elif subcmd in ['observations', 'obs']:
             async for result in self._handle_observations(event, args):
                 yield result
+        elif subcmd == 'daily':
+            async for result in self._handle_daily(event):
+                yield result
         elif subcmd == 'help':
             async for result in self._handle_help(event):
                 yield result
         else:
             yield event.plain_result(f"未知子命令: {subcmd}。输入 'ina help' 查看帮助。")
 
-    @filter.command("gbif")
-    async def gbif(self, event: AstrMessageEvent):
-        """手动触发随机物种介绍"""
-        full_text = event.message_str.strip()
-        parts = full_text.split()
-        if len(parts) < 2 or parts[1].lower() != 'daily':
-            yield event.plain_result("用法：gbif daily — 手动获取一条随机物种介绍")
-            return
-
-        self.logger.info("用户手动触发随机物种介绍")
+    async def _handle_daily(self, event: AstrMessageEvent):
+        """处理 ina daily 命令"""
+        self.logger.info("用户手动触发随机物种介绍 (ina daily)")
         yield event.plain_result("正在获取随机物种信息，请稍候...")
 
         info = await self._fetch_random_species()
@@ -600,14 +597,14 @@ class InaturalistPlugin(Star):
             "» 查询分类单元信息（可缩写为ina t）\n"
             "ina observations <数量> <关键词> \n"
             "» 搜索观察记录，显示总数和样本（可缩写为ina obs）\n"
+            "ina daily \n"
+            "» 手动获取一条随机物种介绍\n"
             "ina help \n"
             "» 显示本帮助\n"
-            "gbif daily \n"
-            "» 手动触发随机物种介绍播报\n"
             "示例：\n"
             "ina taxon 大熊猫\n"
             "ina obs 10 啄木鸟\n"
-            "gbif daily\n"
+            "ina daily\n"
             "数据来源：iNaturalist.org"
         )
         yield event.plain_result(help_text)
