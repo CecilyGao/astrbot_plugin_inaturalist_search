@@ -1,7 +1,8 @@
 import aiohttp
 import logging
-from typing import Optional, List, Dict, Any
+import random
 import traceback
+from typing import Optional, List, Dict, Any
 
 from astrbot.api.all import (
     Star, Context, register,
@@ -9,7 +10,7 @@ from astrbot.api.all import (
     MessageEventResult, llm_tool
 )
 from astrbot.api.event import filter
-from astrbot.api.message_components import Image, Plain
+from astrbot.api.message_components import Image, Plain, Target
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
     AiocqhttpMessageEvent,
 )
@@ -255,8 +256,8 @@ OBSERVATIONS_TEMPLATE = """
 @register(
     "astrbot_plugin_inaturalist_search",
     "CecilyGao",
-    "一个基于iNaturalist API的自然观察数据查询插件，支持分类单元信息和观察记录的关键词搜索",
-    "1.0.0",
+    "一个基于iNaturalist API的自然观察数据查询插件，支持分类单元信息和观察记录的关键词搜索，并支持每日随机物种播报",
+    "1.1.0",
     "https://github.com/CecilyGao/astrbot_plugin_inaturalist_search"
 )
 class InaturalistPlugin(Star):
@@ -266,7 +267,9 @@ class InaturalistPlugin(Star):
       ina taxon <关键词>               - 查询分类单元信息（可用 t 缩写）
       ina observations [数量] <关键词>  - 搜索观察记录，显示总数和样本（可用 obs 缩写），数量可前置如：ina obs 10 啄木鸟
       ina help                          - 显示帮助
+      gbif daily                        - 手动触发随机物种介绍播报
     也提供LLM工具调用。
+    每日随机物种播报：通过 CRON 表达式配置，向白名单中的群/私聊发送随机物种介绍。
     """
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -294,10 +297,65 @@ class InaturalistPlugin(Star):
         except (ValueError, TypeError):
             self.default_limit = 5
 
+        # 每日播报配置
+        self.daily_species_cron = self.config.get("daily_species_cron", "")
+        self.daily_species_white_list = self.config.get("daily_species_white_list", [])
+        self.daily_job = None
+        if self.daily_species_cron:
+            self._setup_daily_job()
+
         self.logger.debug(f"InaturalistPlugin initialized. "
                           f"taxon_send_mode={self.taxon_send_mode}, "
                           f"observations_send_mode={self.observations_send_mode}, "
-                          f"default_limit={self.default_limit}")
+                          f"default_limit={self.default_limit}, "
+                          f"daily_species_cron={self.daily_species_cron}, "
+                          f"white_list={self.daily_species_white_list}")
+
+    # =============================
+    # 定时任务设置
+    # =============================
+    def _setup_daily_job(self):
+        """注册每日播报定时任务"""
+        try:
+            job_id = f"{self.__class__.__name__}_daily_species"
+            self.daily_job = self.context.scheduler.add_job(
+                self._daily_species_job,
+                trigger='cron',
+                id=job_id,
+                replace_existing=True,
+                **self._parse_cron(self.daily_species_cron)
+            )
+            self.logger.info(f"每日物种播报定时任务已设置，CRON: {self.daily_species_cron}")
+        except Exception as e:
+            self.logger.error(f"设置每日物种播报定时任务失败: {e}")
+
+    def _parse_cron(self, cron_expr: str) -> dict:
+        """
+        将 CRON 表达式解析为 apscheduler 的 cron 参数
+        支持标准 5 位或 6 位 CRON，这里简化为按空格分割
+        """
+        parts = cron_expr.split()
+        # 适配常见的 5 位 (分 时 日 月 周)
+        if len(parts) == 5:
+            return {
+                'minute': parts[0],
+                'hour': parts[1],
+                'day': parts[2],
+                'month': parts[3],
+                'day_of_week': parts[4]
+            }
+        else:
+            # 其他情况直接返回原表达式，可能报错
+            return {'cron': cron_expr}
+
+    async def terminate(self):
+        """插件卸载时移除定时任务"""
+        if self.daily_job:
+            try:
+                self.context.scheduler.remove_job(self.daily_job.id)
+                self.logger.info("每日物种播报定时任务已移除")
+            except Exception as e:
+                self.logger.error(f"移除定时任务失败: {e}")
 
     # =============================
     # 发送合并转发（参考 multimsg 插件）
@@ -354,6 +412,27 @@ class InaturalistPlugin(Star):
                 yield result
         else:
             yield event.plain_result(f"未知子命令: {subcmd}。输入 'ina help' 查看帮助。")
+
+    @filter.command("gbif")
+    async def gbif(self, event: AstrMessageEvent):
+        """手动触发随机物种介绍"""
+        full_text = event.message_str.strip()
+        parts = full_text.split()
+        if len(parts) < 2 or parts[1].lower() != 'daily':
+            yield event.plain_result("用法：gbif daily — 手动获取一条随机物种介绍")
+            return
+
+        self.logger.info("用户手动触发随机物种介绍")
+        # 发送等待提示
+        yield event.plain_result("正在获取随机物种信息，请稍候...")
+
+        info = await self._fetch_random_species()
+        if not info:
+            yield event.plain_result("获取随机物种信息失败，请稍后重试。")
+            return
+
+        chain = self._build_species_message(info)
+        yield event.chain_result(chain)
 
     async def _handle_taxon(self, event: AstrMessageEvent, args: List[str]):
         if not args:
@@ -500,7 +579,7 @@ class InaturalistPlugin(Star):
 
     async def _handle_help(self, event: AstrMessageEvent):
         help_text = (
-            "🌿 iNaturalist 自然观察数据查询插件 v1.0.0\n"
+            "🌿 iNaturalist 自然观察数据查询插件 v1.1.0\n"
             "命令列表：\n"
             "ina taxon <关键词> \n"
             "» 查询分类单元信息（可缩写为ina t）\n"
@@ -508,9 +587,12 @@ class InaturalistPlugin(Star):
             "» 搜索观察记录，显示总数和样本（可缩写为ina obs）\n"
             "ina help \n"
             "» 显示本帮助\n"
+            "gbif daily \n"
+            "» 手动触发随机物种介绍播报\n"
             "示例：\n"
             "ina taxon 大熊猫\n"
             "ina obs 10 啄木鸟\n"
+            "gbif daily\n"
             "数据来源：iNaturalist.org"
         )
         yield event.plain_result(help_text)
@@ -723,3 +805,130 @@ class InaturalistPlugin(Star):
             return_url=True
         )
         return url
+
+    # =============================
+    # 每日随机物种相关方法
+    # =============================
+    async def _fetch_random_species(self) -> Optional[Dict[str, Any]]:
+        """
+        从 iNaturalist 获取一个随机物种的信息
+        返回字典包含：id, name, common_name, description, photo_url, link
+        """
+        try:
+            # 第一步：获取总 taxa 数量
+            url = "https://api.inaturalist.org/v1/taxa"
+            params = {"per_page": 1}
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=10) as resp:
+                    if resp.status != 200:
+                        self.logger.error(f"获取总taxa数量失败: {resp.status}")
+                        return None
+                    data = await resp.json()
+                    total_results = data.get("total_results", 0)
+                    if total_results == 0:
+                        self.logger.error("总taxa结果为0")
+                        return None
+
+            # 随机选择一个页码 (per_page=1 时页数等于总结果数)
+            random_page = random.randint(1, total_results)
+            params = {"page": random_page, "per_page": 1}
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=10) as resp:
+                    if resp.status != 200:
+                        self.logger.error(f"获取随机taxa失败: {resp.status}")
+                        return None
+                    data = await resp.json()
+                    results = data.get("results", [])
+                    if not results:
+                        self.logger.error("随机taxa结果为空")
+                        return None
+                    taxon = results[0]
+
+            # 提取信息
+            info = {
+                "id": taxon.get("id"),
+                "name": taxon.get("name", "未知学名"),
+                "common_name": taxon.get("preferred_common_name") or "无常用名",
+                "description": "暂无详细介绍。",
+                "photo_url": None,
+                "link": f"https://www.inaturalist.org/taxa/{taxon.get('id')}"
+            }
+
+            # 获取介绍（如果有wikipedia_summary）
+            if taxon.get("wikipedia_summary"):
+                summary = taxon["wikipedia_summary"]
+                if isinstance(summary, dict) and summary.get("description"):
+                    info["description"] = summary["description"]
+
+            # 获取图片
+            if taxon.get("default_photo") and taxon["default_photo"].get("url"):
+                info["photo_url"] = taxon["default_photo"]["url"].replace("square", "medium")
+
+            return info
+
+        except Exception as e:
+            self.logger.error(f"获取随机物种失败: {e}\n{traceback.format_exc()}")
+            return None
+
+    def _build_species_message(self, info: dict) -> list:
+        """
+        根据物种信息构建消息链（文本 + 可选图片）
+        """
+        text = (
+            f"🌿 随机物种介绍\n"
+            f"学名：{info['name']}\n"
+            f"常用名：{info['common_name']}\n"
+            f"介绍：{info['description']}\n"
+            f"更多信息：{info['link']}"
+        )
+        chain = [Plain(text)]
+        if info.get("photo_url"):
+            chain.append(Image.fromURL(info["photo_url"]))
+        return chain
+
+    def _parse_umo(self, umo: str) -> tuple:
+        """
+        解析 UMO 字符串，返回 (platform, msg_type, target_id)
+        例如 "default:GroupMessage:921431240" -> ("default", "GroupMessage", "921431240")
+        """
+        parts = umo.split(':')
+        if len(parts) != 3:
+            raise ValueError(f"无效的UMO格式: {umo}")
+        return parts[0], parts[1], parts[2]
+
+    async def _daily_species_job(self):
+        """定时任务：向白名单中所有目标发送随机物种介绍"""
+        self.logger.info("开始执行每日物种播报定时任务")
+        if not self.daily_species_white_list:
+            self.logger.warning("白名单为空，跳过播报")
+            return
+
+        info = await self._fetch_random_species()
+        if not info:
+            self.logger.error("获取随机物种信息失败，本次播报取消")
+            return
+
+        chain = self._build_species_message(info)
+
+        for umo in self.daily_species_white_list:
+            try:
+                platform_name, msg_type, target_id = self._parse_umo(umo)
+                # 根据消息类型确定 target_type
+                if msg_type == "GroupMessage":
+                    target_type = "group"
+                elif msg_type == "FriendMessage":
+                    target_type = "private"
+                else:
+                    self.logger.error(f"未知的消息类型: {msg_type}，跳过 {umo}")
+                    continue
+
+                platform = self.context.get_platform(platform_name)
+                if not platform:
+                    self.logger.error(f"平台 {platform_name} 不存在，跳过 {umo}")
+                    continue
+
+                target = Target(platform_name, target_id, target_type)
+                await platform.send_message(target, chain)
+                self.logger.info(f"已向 {umo} 发送每日物种介绍")
+            except Exception as e:
+                self.logger.error(f"向 {umo} 发送消息失败: {e}")
